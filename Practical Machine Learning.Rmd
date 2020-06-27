@@ -1,0 +1,137 @@
+---
+title: "Practical Machine Learning - Course Project"
+author: "Sleiman Ghusayni"
+date: "6/27/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Prediction Assignment Writeup
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+## Loading Libraries
+```{r Libraries}
+rm(list = ls(all = TRUE))
+library(knitr)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+library(corrplot)
+set.seed(12345)
+```
+
+## Getting Data
+
+```{r Data}
+
+# Get the datasets
+training <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"))
+testing  <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"))
+
+# partitioning the training dataset 
+inTrain  <- createDataPartition(training$classe, p=0.7, list=FALSE)
+TrainSet <- training[inTrain, ]
+TestSet  <- training[-inTrain, ]
+dim(TrainSet)
+dim(TestSet)
+
+```
+
+## Cleaning Data
+We got 160 variables with many NA values.
+```{r cleaning Data}
+
+# clean variables with Nearly Zero Variance
+remove_NZvar <- nearZeroVar(TrainSet)
+TrainSet <- TrainSet[, -remove_NZvar]
+TestSet  <- TestSet[, -remove_NZvar]
+dim(TrainSet)
+dim(TestSet)
+
+# clean varaibles mostly NA
+AllNA    <- sapply(TrainSet, function(x) mean(is.na(x))) > 0.95
+TrainSet <- TrainSet[, AllNA==FALSE]
+TestSet  <- TestSet[, AllNA==FALSE]
+dim(TrainSet)
+dim(TestSet)
+
+# clean identification variables
+TrainSet <- TrainSet[, -(1:5)]
+TestSet  <- TestSet[, -(1:5)]
+dim(TrainSet)
+dim(TestSet)
+
+```
+## Correlation Analysis
+Analysing the correlation before we build model.
+
+``` {r coorelation}
+corMatrix <- cor(TrainSet[, -54])
+corrplot(corMatrix, order = "FPC", method = "color", type = "lower", tl.cex = 0.75, tl.col = rgb(0, 0, 0))
+```
+
+## Selecting Prediction Models 
+The methods are: Random Forests and Decision Tree.
+
+
+```{r models}
+# 1 - Random Forest
+# model fit
+set.seed(12345)
+controlRF <- trainControl(method="cv", number=5, allowParallel=TRUE)
+modFitRandForest <- train(classe ~ ., data=TrainSet, method="rf", trControl=controlRF)
+
+modFitRandForest$finalModel
+
+# prediction on Test dataset
+predictRandForest <- predict(modFitRandForest, newdata=TestSet)
+confMatRandForest <- confusionMatrix(predictRandForest, as.factor(TestSet$classe))
+confMatRandForest
+
+# plot matrix results
+plot(confMatRandForest$table, col = confMatRandForest$byClass, 
+     main = paste("Random Forest - Accuracy =",
+                  round(confMatRandForest$overall['Accuracy'], 4)))
+# 2 - Decision Trees
+
+# model fit
+set.seed(12345)
+modFitDecTree <- rpart(classe ~ ., data=TrainSet, method="class")
+fancyRpartPlot(modFitDecTree)
+
+# prediction on Test dataset
+predictDecTree <- predict(modFitDecTree, newdata=TestSet, type="class")
+confMatDecTree <- confusionMatrix(predictDecTree, as.factor(TestSet$classe))
+confMatDecTree
+
+# plot matrix results
+plot(confMatDecTree$table, col = confMatDecTree$byClass, 
+     main = paste("Decision Tree - Accuracy =",
+                  round(confMatDecTree$overall['Accuracy'], 4)))
+
+```
+
+
+
+
+
+## The accuracy of the 2  models done above are:
+
+Random Forest : 0.9992
+Decision Tree : 0.7342
+
+
+## Applying the best model to the validation data
+By comparing the accuracy rate values of the two models, it is clear the the ‘Random Forest’ model is the best So will use it on the validation data
+
+``` {r predictT}
+predictTEST <- predict(modFitRandForest, newdata=testing)
+predictTEST
+```
+
